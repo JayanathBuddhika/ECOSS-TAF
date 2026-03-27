@@ -43,7 +43,7 @@ public class TW_ProductsListingPage {
     }
 
     // =================================
-    // Card Actions (direct, without TW_ProductCard)
+    // Card Actions (direct, without TWIX_ProductCard)
     // =================================
 
     public void clickAddButton(int cardIndex) {
