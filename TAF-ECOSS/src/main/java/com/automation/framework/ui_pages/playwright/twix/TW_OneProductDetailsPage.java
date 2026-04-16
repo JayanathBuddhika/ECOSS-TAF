@@ -11,7 +11,8 @@ public class TW_OneProductDetailsPage {
 
     // ===== Product Info =====
     private static final String PRODUCT_NAME    = "h1";
-    private static final String PRODUCT_SKU     = "span.text-sm.text-gray-600";
+    // private static final String PRODUCT_SKU     = "span.text-sm.text-gray-600";
+    private static final String PRODUCT_SKU     = "span.text-2xl.text-gray-600";
     private static final String PRODUCT_PRICE   = "div.text-4xl.font-bold.text-gray-900";
     private static final String PRODUCT_IMAGE   = "img";
     private static final String PRODUCT_DESC    = "p.text-sm.text-gray-700.leading-relaxed";
