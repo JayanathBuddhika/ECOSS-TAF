@@ -84,6 +84,8 @@ public class TwixFullFlowTest extends PlaywrightBaseTest {
                 TW_ProductCard firstCard = productsPage.getCard(0);
 
                 String listingName = firstCard.getProductName();
+
+                System.out.println("Listing page - captured product name: " + listingName);
                 String listingSku = firstCard.getProductSku();
                 String listingPrice = firstCard.getProductPrice();
 
