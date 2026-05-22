@@ -92,7 +92,22 @@ jobs:
           mvn clean test $SUITE_FLAG -DbaseUrl=$TARGET_URL
 
       # -----------------------------
-      # Restore Previous Allure History
+      # Debug Test Outputs
+      # -----------------------------
+      - name: Debug Allure Results
+        if: always()
+        run: |
+          echo "Current directory:"
+          pwd
+
+          echo "Project structure:"
+          ls -la
+
+          echo "Contents of allure-results:"
+          ls -R allure-results || true
+
+      # -----------------------------
+      # Checkout gh-pages branch
       # -----------------------------
       - name: Checkout gh-pages branch
         if: always()
@@ -103,12 +118,16 @@ jobs:
             https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git \
             gh-pages || true
 
-      - name: Restore Allure history
+      # -----------------------------
+      # Restore Previous Allure History
+      # -----------------------------
+      - name: Restore Allure History
         if: always()
         run: |
+          mkdir -p allure-results
+
           if [ -d "gh-pages/history" ]; then
             echo "Restoring Allure history..."
-            mkdir -p allure-results
             cp -R gh-pages/history allure-results/history
           else
             echo "No previous history found"
@@ -122,6 +141,24 @@ jobs:
         run: npm install -g allure-commandline
 
       # -----------------------------
+      # Verify Allure Results
+      # -----------------------------
+      - name: Verify Allure Results Exist
+        if: always()
+        run: |
+          if [ ! -d "allure-results" ]; then
+            echo "allure-results directory does not exist!"
+            exit 1
+          fi
+
+          if [ -z "$(ls -A allure-results 2>/dev/null)" ]; then
+            echo "allure-results is EMPTY!"
+            exit 1
+          fi
+
+          echo "Allure result files found successfully."
+
+      # -----------------------------
       # Generate Allure Report
       # -----------------------------
       - name: Generate Allure Report
@@ -130,10 +167,15 @@ jobs:
           REPORT_DIR="allure-report-${{ github.run_number }}-${{ github.run_attempt }}"
           echo "REPORT_DIR=$REPORT_DIR" >> $GITHUB_ENV
 
+          echo "Generating Allure report..."
+
           allure generate allure-results --clean -o $REPORT_DIR
 
+          echo "Generated report contents:"
+          ls -R $REPORT_DIR
+
       # -----------------------------
-      # Save Updated History
+      # Update Allure History
       # -----------------------------
       - name: Update Allure History
         if: always()
@@ -165,4 +207,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: allure-report-${{ github.run_number }}
-          path: TAF-ECOSS/${{ env.REPORT_DIR }}
+          path: ./TAF-ECOSS/${{ env.REPORT_DIR }}
