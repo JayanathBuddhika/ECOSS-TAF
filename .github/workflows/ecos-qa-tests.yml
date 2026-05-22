@@ -1,0 +1,168 @@
+name: HMPM-ECOS-Automation-Framework
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Select the target environment"
+        required: true
+        default: "dev"
+        type: choice
+        options:
+          - dev
+
+      shop:
+        description: "Select the shop context"
+        required: true
+        default: "cookiedent"
+        type: choice
+        options:
+          - cookiedent
+          - twix
+
+      test_suite:
+        description: "Select the test suite execution scope"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - api
+          - ui
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  run-automation:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: ./TAF-ECOSS
+
+    steps:
+      # -----------------------------
+      # Checkout Repository
+      # -----------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      # -----------------------------
+      # Setup Java
+      # -----------------------------
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: "temurin"
+          cache: "maven"
+
+      # -----------------------------
+      # Install Playwright Browsers
+      # -----------------------------
+      - name: Install Playwright Browsers
+        run: |
+          mvn exec:java -e \
+          -Dexec.mainClass=com.microsoft.playwright.CLI \
+          -Dexec.args="install --with-deps"
+
+      # -----------------------------
+      # Execute Tests
+      # -----------------------------
+      - name: Run Tests with Maven
+        run: |
+          TARGET_URL="https://${{ github.event.inputs.shop }}.${{ github.event.inputs.environment }}k8s.hm-pm.net"
+
+          SUITE_SELECTION="${{ github.event.inputs.test_suite }}"
+
+          if [ "$SUITE_SELECTION" = "api" ]; then
+            SUITE_FLAG="-DsuiteXmlFile=src/test/resources/suites/api/sprint_two/general_api_test.xml"
+          elif [ "$SUITE_SELECTION" = "ui" ]; then
+            SUITE_FLAG="-DsuiteXmlFile=src/test/resources/suites/ui/sprint_two/cart-tests.xml"
+          else
+            SUITE_FLAG=""
+          fi
+
+          mvn clean test $SUITE_FLAG -DbaseUrl=$TARGET_URL
+
+      # -----------------------------
+      # Restore Previous Allure History
+      # -----------------------------
+      - name: Checkout gh-pages branch
+        if: always()
+        continue-on-error: true
+        run: |
+          git clone \
+            --branch gh-pages \
+            https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git \
+            gh-pages || true
+
+      - name: Restore Allure history
+        if: always()
+        run: |
+          if [ -d "gh-pages/history" ]; then
+            echo "Restoring Allure history..."
+            mkdir -p allure-results
+            cp -R gh-pages/history allure-results/history
+          else
+            echo "No previous history found"
+          fi
+
+      # -----------------------------
+      # Install Allure CLI
+      # -----------------------------
+      - name: Install Allure CLI
+        if: always()
+        run: npm install -g allure-commandline
+
+      # -----------------------------
+      # Generate Allure Report
+      # -----------------------------
+      - name: Generate Allure Report
+        if: always()
+        run: |
+          REPORT_DIR="allure-report-${{ github.run_number }}-${{ github.run_attempt }}"
+          echo "REPORT_DIR=$REPORT_DIR" >> $GITHUB_ENV
+
+          allure generate allure-results --clean -o $REPORT_DIR
+
+      # -----------------------------
+      # Save Updated History
+      # -----------------------------
+      - name: Update Allure History
+        if: always()
+        run: |
+          mkdir -p gh-pages/history
+
+          if [ -d "$REPORT_DIR/history" ]; then
+            cp -R $REPORT_DIR/history/* gh-pages/history/
+          fi
+
+          cd gh-pages
+
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+          git add .
+
+          git commit -m "Update Allure history - run ${{ github.run_number }}" || echo "No changes to commit"
+
+          git push \
+            https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git \
+            gh-pages
+
+      # -----------------------------
+      # Upload Allure Report Artifact
+      # -----------------------------
+      - name: Upload Allure Report Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-report-${{ github.run_number }}
+          path: TAF-ECOSS/${{ env.REPORT_DIR }}
