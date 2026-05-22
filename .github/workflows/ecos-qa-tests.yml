@@ -52,7 +52,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          persist-credentials: true
 
       # -----------------------------
       # Setup Java
@@ -101,76 +100,18 @@ jobs:
           echo "Current directory:"
           pwd
 
-          echo "Project structure:"
+          echo "Project files:"
           ls -la
 
-          echo "Contents of allure-results:"
+          echo "Allure results:"
           ls -R allure-results || true
-
-      # -----------------------------
-      # Checkout or Create gh-pages
-      # -----------------------------
-      - name: Checkout/Create gh-pages branch
-        if: always()
-        run: |
-          if git ls-remote --exit-code --heads \
-            https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git \
-            gh-pages; then
-
-            echo "gh-pages branch exists. Cloning..."
-
-            git clone \
-              --branch gh-pages \
-              https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git \
-              gh-pages
-
-          else
-
-            echo "gh-pages branch does not exist. Creating..."
-
-            mkdir gh-pages
-            cd gh-pages
-
-            git init
-            git checkout -b gh-pages
-
-            git config user.name "github-actions"
-            git config user.email "github-actions@github.com"
-
-            touch .nojekyll
-
-            git add .
-            git commit -m "Initial gh-pages commit"
-
-            git remote add origin \
-              https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
-
-            git push origin gh-pages
-          fi
-
-      # -----------------------------
-      # Restore Previous Allure History
-      # -----------------------------
-      - name: Restore Allure History
-        if: always()
-        run: |
-          mkdir -p allure-results
-
-          if [ -d "gh-pages/history" ]; then
-            echo "Restoring Allure history..."
-
-            cp -R gh-pages/history allure-results/history
-          else
-            echo "No previous history found"
-          fi
 
       # -----------------------------
       # Install Allure CLI
       # -----------------------------
       - name: Install Allure CLI
         if: always()
-        run: |
-          npm install -g allure-commandline
+        run: npm install -g allure-commandline
 
       # -----------------------------
       # Verify Allure Results
@@ -179,16 +120,18 @@ jobs:
         if: always()
         run: |
           if [ ! -d "allure-results" ]; then
-            echo "allure-results directory does not exist!"
+            echo "ERROR: allure-results directory not found"
             exit 1
           fi
 
-          if [ -z "$(ls -A allure-results 2>/dev/null)" ]; then
-            echo "allure-results is EMPTY!"
+          RESULT_COUNT=$(find allure-results -name "*-result.json" | wc -l)
+
+          echo "Result files count: $RESULT_COUNT"
+
+          if [ "$RESULT_COUNT" -eq 0 ]; then
+            echo "ERROR: No Allure result files found"
             exit 1
           fi
-
-          echo "Allure result files found successfully."
 
       # -----------------------------
       # Generate Allure Report
@@ -196,59 +139,42 @@ jobs:
       - name: Generate Allure Report
         if: always()
         run: |
-          REPORT_DIR="allure-report-${{ github.run_number }}-${{ github.run_attempt }}"
-          echo "REPORT_DIR=$REPORT_DIR" >> $GITHUB_ENV
+          REPORT_DIR="allure-report"
 
-          echo "Generating Allure report..."
+          echo "REPORT_DIR=$REPORT_DIR" >> $GITHUB_ENV
 
           allure generate allure-results --clean -o $REPORT_DIR
 
-          echo "Generated report contents:"
+          echo "Generated report:"
           ls -R $REPORT_DIR
 
       # -----------------------------
-      # Update Allure History
+      # Deploy Report to GitHub Pages
       # -----------------------------
-      - name: Update Allure History
+      - name: Deploy Allure Report to GitHub Pages
         if: always()
-        run: |
-          mkdir -p gh-pages/history
-
-          if [ -d "$REPORT_DIR/history" ]; then
-            cp -R $REPORT_DIR/history/* gh-pages/history/
-          fi
-
-      # -----------------------------
-      # Publish Allure Report to gh-pages
-      # -----------------------------
-      - name: Publish Allure Report
-        if: always()
-        run: |
-          rm -rf gh-pages/*
-
-          cp -R $REPORT_DIR/* gh-pages/
-
-          touch gh-pages/.nojekyll
-
-          cd gh-pages
-
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-
-          git add .
-
-          git commit -m "Deploy Allure Report - Run ${{ github.run_number }}" || echo "No changes to commit"
-
-          git push \
-            https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git \
-            gh-pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: ./TAF-ECOSS/allure-report
+          force_orphan: true
 
       # -----------------------------
-      # Upload Allure Report Artifact
+      # Upload Artifact
       # -----------------------------
       - name: Upload Allure Report Artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: allure-report-${{ github.run_number }}
-          path: ./TAF-ECOSS/${{ env.REPORT_DIR }}
+          name: allure-report
+          path: ./TAF-ECOSS/allure-report
+
+      # -----------------------------
+      # Print Report URL
+      # -----------------------------
+      - name: Print Report URL
+        if: always()
+        run: |
+          echo "Allure Report URL:"
+          echo "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/"
