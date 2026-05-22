@@ -44,6 +44,7 @@ jobs:
         working-directory: ./TAF-ECOSS
 
     steps:
+
       # -----------------------------
       # Checkout Repository
       # -----------------------------
@@ -92,7 +93,7 @@ jobs:
           mvn clean test $SUITE_FLAG -DbaseUrl=$TARGET_URL
 
       # -----------------------------
-      # Debug Test Outputs
+      # Debug Allure Results
       # -----------------------------
       - name: Debug Allure Results
         if: always()
@@ -107,16 +108,45 @@ jobs:
           ls -R allure-results || true
 
       # -----------------------------
-      # Checkout gh-pages branch
+      # Checkout or Create gh-pages
       # -----------------------------
-      - name: Checkout gh-pages branch
+      - name: Checkout/Create gh-pages branch
         if: always()
-        continue-on-error: true
         run: |
-          git clone \
-            --branch gh-pages \
+          if git ls-remote --exit-code --heads \
             https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git \
-            gh-pages || true
+            gh-pages; then
+
+            echo "gh-pages branch exists. Cloning..."
+
+            git clone \
+              --branch gh-pages \
+              https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git \
+              gh-pages
+
+          else
+
+            echo "gh-pages branch does not exist. Creating..."
+
+            mkdir gh-pages
+            cd gh-pages
+
+            git init
+            git checkout -b gh-pages
+
+            git config user.name "github-actions"
+            git config user.email "github-actions@github.com"
+
+            touch .nojekyll
+
+            git add .
+            git commit -m "Initial gh-pages commit"
+
+            git remote add origin \
+              https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+
+            git push origin gh-pages
+          fi
 
       # -----------------------------
       # Restore Previous Allure History
@@ -128,6 +158,7 @@ jobs:
 
           if [ -d "gh-pages/history" ]; then
             echo "Restoring Allure history..."
+
             cp -R gh-pages/history allure-results/history
           else
             echo "No previous history found"
@@ -138,7 +169,8 @@ jobs:
       # -----------------------------
       - name: Install Allure CLI
         if: always()
-        run: npm install -g allure-commandline
+        run: |
+          npm install -g allure-commandline
 
       # -----------------------------
       # Verify Allure Results
@@ -186,6 +218,18 @@ jobs:
             cp -R $REPORT_DIR/history/* gh-pages/history/
           fi
 
+      # -----------------------------
+      # Publish Allure Report to gh-pages
+      # -----------------------------
+      - name: Publish Allure Report
+        if: always()
+        run: |
+          rm -rf gh-pages/*
+
+          cp -R $REPORT_DIR/* gh-pages/
+
+          touch gh-pages/.nojekyll
+
           cd gh-pages
 
           git config user.name "github-actions"
@@ -193,7 +237,7 @@ jobs:
 
           git add .
 
-          git commit -m "Update Allure history - run ${{ github.run_number }}" || echo "No changes to commit"
+          git commit -m "Deploy Allure Report - Run ${{ github.run_number }}" || echo "No changes to commit"
 
           git push \
             https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git \
