@@ -1,0 +1,2 @@
+X-Ecos-Session-Id: invalidSessionValue
+X-Ecos-Tenant-Domain: invalidTenantDomainValue

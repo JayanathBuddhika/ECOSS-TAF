@@ -1,0 +1,2 @@
+X-Ecos-Session-Id: session1
+X-Ecos-Tenant-Domain: cookiedent.local
